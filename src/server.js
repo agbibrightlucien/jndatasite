@@ -1,15 +1,19 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const morgan = require('morgan');
 const mongoose = require('mongoose');
 const { MONGODB_URI, mongooseOptions } = require('./config/database');
-const errorHandler = require('./middleware/errorHandler');
+const { errorHandler, notFound } = require('./middleware/errorHandler');
 const routes = require('./routes');
 const homeController = require('./controllers/homeController');
 
 const app = express();
 
 // Middleware
+// Request logging middleware (Morgan)
+app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined'));
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -43,7 +47,10 @@ process.on('SIGINT', () => {
 app.get('/', homeController.welcome);
 app.use('/api', routes);
 
-// Error handling middleware
+// Handle 404 errors for unmatched routes
+app.use(notFound);
+
+// Global error handling middleware
 app.use(errorHandler);
 
 // Start server

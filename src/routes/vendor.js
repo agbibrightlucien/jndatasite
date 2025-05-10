@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Vendor = require('../models/Vendor');
 const DataBundle = require('../models/DataBundle');
 const VendorPrice = require('../models/VendorPrice');
 const Order = require('../models/Order');
+const Withdrawal = require('../models/Withdrawal');
 const { generateToken } = require('../utils/jwt');
 const authMiddleware = require('../middleware/auth');
 const { validateLogin, validateRegistration } = require('../middleware/validation');
@@ -210,6 +212,70 @@ router.get('/me/orders', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Error fetching vendor orders' });
+  }
+});
+
+// Get vendor's profit and available balance
+router.get('/me/profit', async (req, res) => {
+  try {
+    // Calculate total profit from completed orders
+    const profitAggregation = await Order.aggregate([
+      {
+        $match: {
+          $or: [
+            { vendor: mongoose.Types.ObjectId(req.user.id) },
+            { subVendor: mongoose.Types.ObjectId(req.user.id) }
+          ],
+          status: 'complete'
+        }
+      },
+      {
+        $lookup: {
+          from: 'databundles',
+          localField: 'dataBundle',
+          foreignField: '_id',
+          as: 'bundleData'
+        }
+      },
+      { $unwind: '$bundleData' },
+      {
+        $group: {
+          _id: null,
+          totalProfit: {
+            $sum: { $subtract: ['$amountPaid', '$bundleData.basePrice'] }
+          }
+        }
+      }
+    ]);
+
+    // Calculate total approved withdrawals
+    const withdrawalAggregation = await Withdrawal.aggregate([
+      {
+        $match: {
+          vendor: mongoose.Types.ObjectId(req.user.id),
+          status: 'approved'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalWithdrawn: { $sum: '$amountRequested' }
+        }
+      }
+    ]);
+
+    const totalProfit = profitAggregation[0]?.totalProfit || 0;
+    const totalWithdrawn = withdrawalAggregation[0]?.totalWithdrawn || 0;
+    const availableBalance = totalProfit - totalWithdrawn;
+
+    res.json({
+      totalProfit,
+      totalWithdrawn,
+      availableBalance
+    });
+  } catch (error) {
+    console.error('Error calculating profit:', error);
+    res.status(500).json({ error: 'Error calculating profit and balance' });
   }
 });
 

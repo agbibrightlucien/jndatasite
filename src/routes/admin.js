@@ -21,15 +21,22 @@ router.use((req, res, next) => {
 });
 
 // Get all withdrawal requests
-router.get('/withdrawals', async (req, res) => {
+router.get('/withdrawals', async (req, res, next) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
+    if (page < 1 || limit < 1) {
+      throw new APIError(400, 'Invalid pagination parameters');
+    }
+
     // Build filter object based on query parameters
     const filter = {};
     if (req.query.status) {
+      if (!['pending', 'approved', 'rejected'].includes(req.query.status)) {
+        throw new APIError(400, 'Invalid status filter');
+      }
       filter.status = req.query.status;
     }
 
@@ -37,10 +44,18 @@ router.get('/withdrawals', async (req, res) => {
     if (req.query.startDate || req.query.endDate) {
       filter.createdAt = {};
       if (req.query.startDate) {
-        filter.createdAt.$gte = new Date(req.query.startDate);
+        const startDate = new Date(req.query.startDate);
+        if (isNaN(startDate.getTime())) {
+          throw new APIError(400, 'Invalid start date format');
+        }
+        filter.createdAt.$gte = startDate;
       }
       if (req.query.endDate) {
-        filter.createdAt.$lte = new Date(req.query.endDate);
+        const endDate = new Date(req.query.endDate);
+        if (isNaN(endDate.getTime())) {
+          throw new APIError(400, 'Invalid end date format');
+        }
+        filter.createdAt.$lte = endDate;
       }
     }
 
@@ -63,29 +78,29 @@ router.get('/withdrawals', async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ error: 'Error fetching withdrawal requests' });
+    next(error);
   }
 });
 
 // Approve or reject withdrawal request
-router.put('/withdrawals/:id/approve', async (req, res) => {
+router.put('/withdrawals/:id/approve', async (req, res, next) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
 
     // Validate status
     if (!['approved', 'rejected'].includes(status)) {
-      return res.status(400).json({ error: 'Status must be either approved or rejected' });
+      throw new APIError(400, 'Status must be either approved or rejected');
     }
 
     const withdrawal = await Withdrawal.findById(id);
     if (!withdrawal) {
-      return res.status(404).json({ error: 'Withdrawal request not found' });
+      throw new APIError(404, 'Withdrawal request not found');
     }
 
     // Only allow processing of pending withdrawals
     if (withdrawal.status !== 'pending') {
-      return res.status(400).json({ error: 'Can only process pending withdrawal requests' });
+      throw new APIError(400, 'Can only process pending withdrawal requests');
     }
 
     withdrawal.status = status;
@@ -98,9 +113,10 @@ router.put('/withdrawals/:id/approve', async (req, res) => {
     });
   } catch (error) {
     if (error.name === 'CastError') {
-      return res.status(400).json({ error: 'Invalid withdrawal ID format' });
+      next(new APIError(400, 'Invalid withdrawal ID format'));
+      return;
     }
-    res.status(500).json({ error: 'Error processing withdrawal request' });
+    next(error);
   }
 });
 
@@ -441,11 +457,15 @@ router.put('/subvendors/:id/approve', async (req, res) => {
 });
 
 // Get all vendors route
-router.get('/vendors', async (req, res) => {
+router.get('/vendors', async (req, res, next) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
+
+    if (page < 1 || limit < 1) {
+      throw new APIError(400, 'Invalid pagination parameters');
+    }
 
     // Build filter object based on query parameters
     const filter = {};
@@ -477,7 +497,7 @@ router.get('/vendors', async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ error: 'Error fetching vendors' });
+    next(error);
   }
 });
 
@@ -549,18 +569,18 @@ router.post('/login', validateLogin, async (req, res) => {
 });
 
 // Approve or reject vendor route
-router.put('/vendors/:vendorId/approve', async (req, res) => {
+router.put('/vendors/:vendorId/approve', async (req, res, next) => {
   try {
     const { vendorId } = req.params;
     const { approved } = req.body;
 
     if (typeof approved !== 'boolean') {
-      return res.status(400).json({ error: 'Approved status must be a boolean value' });
+      throw new APIError(400, 'Approved status must be a boolean value');
     }
 
     const vendor = await Vendor.findById(vendorId);
     if (!vendor) {
-      return res.status(404).json({ error: 'Vendor not found' });
+      throw new APIError(404, 'Vendor not found');
     }
 
     vendor.approved = approved;
@@ -572,9 +592,10 @@ router.put('/vendors/:vendorId/approve', async (req, res) => {
     });
   } catch (error) {
     if (error.name === 'CastError') {
-      return res.status(400).json({ error: 'Invalid vendor ID format' });
+      next(new APIError(400, 'Invalid vendor ID format'));
+      return;
     }
-    res.status(500).json({ error: 'Error updating vendor approval status' });
+    next(error);
   }
 });
 

@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const Vendor = require('../models/Vendor');
 const DataBundle = require('../models/DataBundle');
+const VendorPrice = require('../models/VendorPrice');
+const Order = require('../models/Order');
 const { generateToken } = require('../utils/jwt');
 const authMiddleware = require('../middleware/auth');
 const { validateLogin, validateRegistration } = require('../middleware/validation');
@@ -36,6 +38,31 @@ router.get('/link/:vendorLink', async (req, res) => {
 // Protected vendor routes
 router.use(authMiddleware, roleAuth(['vendor']));
 
+// Get vendor's own profile
+router.get('/me', async (req, res) => {
+  try {
+    const vendor = await Vendor.findById(req.user.id)
+      .select('-password')
+      .populate([
+        {
+          path: 'orders',
+          options: { sort: { createdAt: -1 }, limit: 10 }
+        },
+        {
+          path: 'withdrawals',
+          options: { sort: { createdAt: -1 }, limit: 10 }
+        }
+      ]);
+
+    if (!vendor) {
+      return res.status(404).json({ error: 'Vendor not found' });
+    }
+
+    res.json(vendor);
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching vendor profile' });
+  }
+});
 
 // Vendor registration route
 router.post('/register', validateRegistration, async (req, res) => {
@@ -65,6 +92,32 @@ router.post('/register', validateRegistration, async (req, res) => {
     res.status(201).json(vendorWithoutPassword);
   } catch (error) {
     res.status(500).json({ error: 'Error creating vendor account' });
+  }
+});
+
+// Update vendor profile
+router.put('/me', validateProfileUpdate, async (req, res) => {
+  try {
+    const { name, phone } = req.body;
+    const updateFields = {};
+
+    // Only include fields that are provided
+    if (name) updateFields.name = name;
+    if (phone) updateFields.phone = phone;
+
+    const vendor = await Vendor.findByIdAndUpdate(
+      req.user.id,
+      { $set: updateFields },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!vendor) {
+      return res.status(404).json({ error: 'Vendor not found' });
+    }
+
+    res.json(vendor);
+  } catch (error) {
+    res.status(500).json({ error: 'Error updating vendor profile' });
   }
 });
 
@@ -101,6 +154,111 @@ router.post('/login', validateLogin, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Error during login' });
+  }
+});
+
+// Get vendor's orders
+router.get('/me/orders', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    // Build filter object
+    const filter = {
+      $or: [
+        { vendor: req.user.id },
+        { subVendor: req.user.id }
+      ]
+    };
+
+    // Add date range filter if provided
+    if (req.query.startDate || req.query.endDate) {
+      filter.createdAt = {};
+      if (req.query.startDate) {
+        filter.createdAt.$gte = new Date(req.query.startDate);
+      }
+      if (req.query.endDate) {
+        filter.createdAt.$lte = new Date(req.query.endDate);
+      }
+    }
+
+    // Add status filter if provided
+    if (req.query.status && ['pending', 'complete'].includes(req.query.status)) {
+      filter.status = req.query.status;
+    }
+
+    // Get orders with pagination and populate related data
+    const orders = await Order.find(filter)
+      .populate('dataBundle', 'name network basePrice')
+      .populate('vendor', 'name email')
+      .populate('subVendor', 'name email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    // Get total count for pagination
+    const total = await Order.countDocuments(filter);
+
+    res.json({
+      orders,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching vendor orders' });
+  }
+});
+
+// Update vendor prices for data bundles
+router.put('/me/prices', async (req, res) => {
+  try {
+    const { prices } = req.body;
+
+    if (!Array.isArray(prices)) {
+      return res.status(400).json({ error: 'Prices must be an array' });
+    }
+
+    // Validate and update each price
+    const results = await Promise.all(prices.map(async ({ bundleId, price }) => {
+      // Validate required fields
+      if (!bundleId || typeof price !== 'number') {
+        return { error: 'Invalid price data', bundleId };
+      }
+
+      // Get bundle to check basePrice
+      const bundle = await DataBundle.findById(bundleId);
+      if (!bundle) {
+        return { error: 'Bundle not found', bundleId };
+      }
+
+      // Validate price against basePrice
+      if (price < bundle.basePrice) {
+        return { error: `Price cannot be less than base price ${bundle.basePrice}`, bundleId };
+      }
+
+      // Update or create vendor price
+      const vendorPrice = await VendorPrice.findOneAndUpdate(
+        { vendor: req.user.id, dataBundle: bundleId },
+        { price },
+        { new: true, upsert: true, runValidators: true }
+      );
+
+      return { success: true, bundleId, price: vendorPrice.price };
+    }));
+
+    // Check if any operations failed
+    const hasErrors = results.some(result => result.error);
+    if (hasErrors) {
+      return res.status(400).json({ results });
+    }
+
+    res.json({ results });
+  } catch (error) {
+    res.status(500).json({ error: 'Error updating vendor prices' });
   }
 });
 

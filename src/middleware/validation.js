@@ -50,7 +50,29 @@ const validateRegistration = [
   validate
 ];
 
+// Validation rules for vendor profile update
+const validateProfileUpdate = [
+  body('name')
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage('Name cannot be empty')
+    .isLength({ min: 2 })
+    .withMessage('Name must be at least 2 characters long'),
+  
+  body('phone')
+    .optional()
+    .trim()
+    .notEmpty()
+    .withMessage('Phone number cannot be empty')
+    .matches(/^\+?[1-9]\d{1,14}$/)
+    .withMessage('Please enter a valid phone number'),
+
+  validate
+];
+
 module.exports = {
   validateLogin,
-  validateRegistration
+  validateRegistration,
+  validateProfileUpdate
 };

@@ -47,13 +47,20 @@ const vendorSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Hash password before saving
+const { generateVendorLink } = require('../utils/uuid');
+
+// Generate vendor link and hash password before saving
 vendorSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
   try {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password, salt);
+    if (this.isModified('password')) {
+      const salt = await bcrypt.genSalt(10);
+      this.password = await bcrypt.hash(this.password, salt);
+    }
+    
+    if (!this.vendorLink) {
+      this.vendorLink = generateVendorLink();
+    }
+    
     next();
   } catch (error) {
     next(error);

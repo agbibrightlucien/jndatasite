@@ -1,15 +1,16 @@
 const express = require('express');
 const router = express.Router();
 
-// Import route modules here
-const adminRoutes = require('./admin');
+const authRoutes = require('./auth');
+const userRoutes = require('./user');
 const vendorRoutes = require('./vendor');
+const adminRoutes = require('./admin');
+const paymentRoutes = require('./payments');
 
-// Define base routes
-router.use('/admin', adminRoutes);
+router.use('/auth', authRoutes);
+router.use('/users', userRoutes);
 router.use('/vendors', vendorRoutes);
-router.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
+router.use('/admin', adminRoutes);
+router.use('/payments', paymentRoutes);
 
 module.exports = router;

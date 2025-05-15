@@ -95,7 +95,7 @@ const AdminDashboard = () => {
 
       <Grid container spacing={3}>
         {/* Vendors Management */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
               Vendors Management
@@ -144,7 +144,7 @@ const AdminDashboard = () => {
         </Grid>
 
         {/* Data Bundles Management */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="h6">

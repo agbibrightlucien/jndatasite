@@ -58,6 +58,18 @@ const SubVendorDashboard = () => {
   
   const handleCreateSubVendor = async () => {
     try {
+      // Validate required fields
+      if (!newSubVendor.name || !newSubVendor.email || !newSubVendor.phone || !newSubVendor.password) {
+        setFormError('All fields are required');
+        return;
+      }
+      
+      // Validate phone number format
+      if (!/^[0-9]{10}$/.test(newSubVendor.phone)) {
+        setFormError('Please enter a valid 10-digit phone number');
+        return;
+      }
+      
       await createSubVendor(newSubVendor);
       setOpenNewSubVendor(false);
       setNewSubVendor({ name: '', email: '', phone: '', password: '' });

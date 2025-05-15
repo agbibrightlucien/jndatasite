@@ -62,8 +62,8 @@ const HomePage = () => {
       // Phone validation
       if (!formData.phone) {
         newErrors.phone = 'Phone number is required';
-      } else if (!/^[0-9]{11}$/.test(formData.phone)) {
-        newErrors.phone = 'Please enter a valid 11-digit phone number';
+      } else if (!/^[0-9]{10}$/.test(formData.phone)) {
+        newErrors.phone = 'Please enter a valid 10-digit phone number';
       }
     }
 
@@ -164,7 +164,7 @@ const HomePage = () => {
           <Grid container spacing={2}>
             {tab === 1 && (
               <>
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <TextField
                     required
                     fullWidth
@@ -176,7 +176,7 @@ const HomePage = () => {
                     helperText={errors.name}
                   />
                 </Grid>
-                <Grid item xs={12}>
+                <Grid size={12}>
                   <TextField
                     required
                     fullWidth
@@ -190,7 +190,7 @@ const HomePage = () => {
                 </Grid>
               </>
             )}
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 required
                 fullWidth
@@ -203,7 +203,7 @@ const HomePage = () => {
                 helperText={errors.email}
               />
             </Grid>
-            <Grid item xs={12}>
+            <Grid size={12}>
               <TextField
                 required
                 fullWidth

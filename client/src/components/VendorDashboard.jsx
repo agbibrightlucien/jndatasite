@@ -70,7 +70,7 @@ const VendorDashboard = () => {
 
       <Grid container spacing={3}>
         {/* Profit Overview */}
-        <Grid item xs={12} md={4}>
+        <Grid size={{ xs: 12, md: 4 }}>
           <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
               Available Profit
@@ -91,7 +91,7 @@ const VendorDashboard = () => {
         </Grid>
 
         {/* Recent Orders */}
-        <Grid item xs={12}>
+        <Grid size={12}>
           <Paper sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
               <Typography variant="h6">

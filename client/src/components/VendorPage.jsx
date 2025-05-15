@@ -54,6 +54,12 @@ const VendorPage = () => {
       setError('Please provide both phone number and email');
       return;
     }
+    
+    // Validate phone number format
+    if (!/^[0-9]{10}$/.test(customerPhone)) {
+      setError('Please enter a valid 10-digit phone number');
+      return;
+    }
 
     try {
       const response = await axios.post(`/api/vendors/${vendorLink}/pay`, {
@@ -99,7 +105,7 @@ const VendorPage = () => {
 
       <Grid container spacing={3}>
         {bundles.map((bundle) => (
-          <Grid item xs={12} sm={6} md={4} key={bundle._id}>
+          <Grid size={{ xs: 12, sm: 6, md: 4 }} key={bundle._id}>
             <Card
               sx={{
                 height: '100%',
@@ -131,7 +137,7 @@ const VendorPage = () => {
             Customer Information
           </Typography>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 fullWidth
                 label="Phone Number"
@@ -140,7 +146,7 @@ const VendorPage = () => {
                 required
               />
             </Grid>
-            <Grid item xs={12} sm={6}>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
                 fullWidth
                 label="Email"

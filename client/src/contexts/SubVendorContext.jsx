@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { apiService } from '../services/api';
+import { useAuth } from './AuthContext';
 
 const SubVendorContext = createContext(null);
 
 export const SubVendorProvider = ({ children }) => {
+  const { loading: authLoading, user } = useAuth();
   const [subVendors, setSubVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -20,8 +22,14 @@ export const SubVendorProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    fetchSubVendors();
-  }, []);
+    // Only fetch subvendors when auth is not loading and user is authenticated
+    if (!authLoading && user) {
+      fetchSubVendors();
+    } else if (!authLoading && !user) {
+      // If auth is done loading and no user is found, update loading state
+      setLoading(false);
+    }
+  }, [authLoading, user]);
 
   const createSubVendor = async (subVendorData) => {
     try {

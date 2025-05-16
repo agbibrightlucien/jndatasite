@@ -1,4 +1,5 @@
 const { body, validationResult } = require('express-validator');
+const { isValidGhanaianPhone } = require('../utils/phoneValidation');
 
 // Validation middleware to check for validation errors
 const validate = (req, res, next) => {
@@ -65,14 +66,52 @@ const validateProfileUpdate = [
     .trim()
     .notEmpty()
     .withMessage('Phone number cannot be empty')
-    .matches(/^\+?[1-9]\d{1,14}$/)
-    .withMessage('Please enter a valid phone number'),
+    .custom(value => {
+      if (!isValidGhanaianPhone(value)) {
+        throw new Error('Please enter a valid Ghanaian phone number (10 digits)');
+      }
+      return true;
+    }),
 
+  validate
+];
+
+// Validation rules for sub-vendor registration
+const validateSubVendorRegistration = [
+  body('name')
+    .trim()
+    .notEmpty()
+    .withMessage('Name is required')
+    .isLength({ min: 2 })
+    .withMessage('Name must be at least 2 characters long'),
+  
+  body('email')
+    .trim()
+    .isEmail()
+    .withMessage('Please enter a valid email address')
+    .normalizeEmail(),
+  
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters long'),
+  
+  body('phone')
+    .trim()
+    .notEmpty()
+    .withMessage('Phone number is required')
+    .custom(value => {
+      if (!isValidGhanaianPhone(value)) {
+        throw new Error('Please enter a valid Ghanaian phone number (10 digits)');
+      }
+      return true;
+    }),
+  
   validate
 ];
 
 module.exports = {
   validateLogin,
   validateRegistration,
-  validateProfileUpdate
+  validateProfileUpdate,
+  validateSubVendorRegistration
 };

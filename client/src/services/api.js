@@ -3,7 +3,7 @@ import { retryRequest, formatErrorMessage, ErrorTypes, getErrorType } from './er
 
 // Create axios instance with default config
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: '/api',  // This will work with Vite's proxy configuration
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'

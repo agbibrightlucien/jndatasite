@@ -45,23 +45,24 @@ function App() {
       <CssBaseline />
       <Router>
         <AuthProvider>
-          <NotificationProvider>
-            <SubVendorProvider>
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/vendor/:vendorLink" element={<VendorPage />} />
-                <Route path="/admin" element={<AdminDashboard />} />
-                <Route
-                  path="/vendor/dashboard"
-                  element={
-                    <ProtectedRoute>
+          {/* Only render child providers after authentication is loaded */}
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/vendor/:vendorLink" element={<VendorPage />} />
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route
+              path="/vendor/dashboard"
+              element={
+                <ProtectedRoute>
+                  <NotificationProvider>
+                    <SubVendorProvider>
                       <VendorDashboard />
-                    </ProtectedRoute>
-                  }
-                />
-              </Routes>
-            </SubVendorProvider>
-          </NotificationProvider>
+                    </SubVendorProvider>
+                  </NotificationProvider>
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
         </AuthProvider>
       </Router>
     </ThemeProvider>

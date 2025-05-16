@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
+const { isValidGhanaianPhone } = require('../utils/phoneValidation');
 
 const vendorSchema = new mongoose.Schema({
   name: {
@@ -17,7 +18,13 @@ const vendorSchema = new mongoose.Schema({
   phone: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    validate: {
+      validator: function(v) {
+        return isValidGhanaianPhone(v);
+      },
+      message: props => `${props.value} is not a valid Ghanaian phone number! Must be 10 digits.`
+    }
   },
   password: {
     type: String,

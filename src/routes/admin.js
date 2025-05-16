@@ -104,8 +104,46 @@ router.put('/withdrawals/:id/approve', async (req, res, next) => {
     }
 
     withdrawal.status = status;
+    if (status === 'rejected') {
+      const vendor = await Vendor.findById(withdrawal.vendor);
+      if (vendor) {
+        vendor.availableBalance += parseFloat(withdrawal.amount.toFixed(2));
+        await vendor.save();
+      }
+    }
     withdrawal.processedAt = new Date();
     await withdrawal.save();
+    
+    // Send notification to vendor about withdrawal status
+    const io = req.app.get('io');
+    const { sendWithdrawalStatusUpdate, sendRoleNotification } = require('../utils/socketNotifications');
+    
+    if (io && withdrawal.vendor) {
+      // Get vendor details for better notification
+      const vendor = await Vendor.findById(withdrawal.vendor).select('name');
+      
+      sendWithdrawalStatusUpdate(io, withdrawal.vendor.toString(), {
+        withdrawalId: withdrawal._id.toString(),
+        status: status,
+        amount: withdrawal.amount,
+        message: status === 'approved' 
+          ? `Your withdrawal request for ₦${withdrawal.amount} has been approved` 
+          : `Your withdrawal request for ₦${withdrawal.amount} has been rejected`,
+        processedAt: withdrawal.processedAt
+      });
+      
+      // Also notify other admins about the processed withdrawal
+      sendRoleNotification(io, 'admin', {
+        type: 'withdrawal_processed',
+        title: `Withdrawal ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+        message: `${vendor ? vendor.name : 'Vendor'}'s withdrawal request for ₦${withdrawal.amount} has been ${status}`,
+        withdrawalId: withdrawal._id.toString(),
+        vendorId: withdrawal.vendor.toString(),
+        amount: withdrawal.amount,
+        status: status,
+        processedBy: req.user.id
+      });
+    }
 
     res.json({
       message: `Withdrawal request ${status} successfully`,
@@ -120,8 +158,125 @@ router.put('/withdrawals/:id/approve', async (req, res, next) => {
   }
 });
 
-// Get analytics data
-router.get('/analytics', async (req, res) => {
+// Get sales data by day
+router.get('/dashboard/sales-by-day', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const matchStage = {};
+    
+    if (startDate || endDate) {
+      matchStage.createdAt = {};
+      if (startDate) matchStage.createdAt.$gte = new Date(startDate);
+      if (endDate) matchStage.createdAt.$lte = new Date(endDate);
+    }
+
+    const salesByDay = await Order.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m-%d", date: "$createdAt" }
+          },
+          totalSales: { $sum: "$amountPaid" },
+          orderCount: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    res.json(salesByDay);
+  } catch (error) {
+    console.error('Error fetching sales by day:', error);
+    res.status(500).json({ error: 'Error fetching sales data' });
+  }
+});
+
+// Get sales data by network
+router.get('/dashboard/sales-by-network', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const matchStage = {};
+    
+    if (startDate || endDate) {
+      matchStage.createdAt = {};
+      if (startDate) matchStage.createdAt.$gte = new Date(startDate);
+      if (endDate) matchStage.createdAt.$lte = new Date(endDate);
+    }
+
+    const salesByNetwork = await Order.aggregate([
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'databundles',
+          localField: 'dataBundle',
+          foreignField: '_id',
+          as: 'bundleData'
+        }
+      },
+      { $unwind: '$bundleData' },
+      {
+        $group: {
+          _id: '$bundleData.network',
+          totalSales: { $sum: "$amountPaid" },
+          orderCount: { $sum: 1 }
+        }
+      },
+      { $sort: { totalSales: -1 } }
+    ]);
+
+    res.json(salesByNetwork);
+  } catch (error) {
+    console.error('Error fetching sales by network:', error);
+    res.status(500).json({ error: 'Error fetching sales data' });
+  }
+});
+
+// Get weekly sales trend
+router.get('/dashboard/sales-by-week', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const matchStage = {};
+    
+    if (startDate || endDate) {
+      matchStage.createdAt = {};
+      if (startDate) matchStage.createdAt.$gte = new Date(startDate);
+      if (endDate) matchStage.createdAt.$lte = new Date(endDate);
+    }
+
+    const salesByWeek = await Order.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$createdAt" },
+            week: { $week: "$createdAt" }
+          },
+          totalSales: { $sum: "$amountPaid" },
+          orderCount: { $sum: 1 },
+          firstDay: { $min: "$createdAt" }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          week: "$_id",
+          totalSales: 1,
+          orderCount: 1,
+          firstDay: 1
+        }
+      },
+      { $sort: { firstDay: 1 } }
+    ]);
+
+    res.json(salesByWeek);
+  } catch (error) {
+    console.error('Error fetching sales by week:', error);
+    res.status(500).json({ error: 'Error fetching sales data' });
+  }
+});
+
+// Get dashboard statistics
+router.get('/dashboard', async (req, res) => {
   try {
     // Calculate total orders and revenue
     const orderStats = await Order.aggregate([
@@ -335,24 +490,46 @@ router.put('/bundles/:id', async (req, res) => {
 });
 
 // Update order status
-router.put('/orders/:orderId/status', async (req, res) => {
+router.put('/orders/:id/status', async (req, res) => {
   try {
-    const { orderId } = req.params;
+    const { id } = req.params;
     const { status } = req.body;
 
-    // Validate status value
-    const validStatuses = ['pending', 'complete', 'cancelled'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ error: 'Invalid status value. Must be one of: pending, complete, cancelled' });
+    if (!['pending', 'processing', 'completed', 'cancelled'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status value' });
     }
 
-    const order = await Order.findById(orderId);
+    const order = await Order.findById(id).populate('vendor dataBundle');
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
 
+    // Save previous status for notification purposes
+    const previousStatus = order.status;
+    
+    // Update order status
     order.status = status;
     await order.save();
+    
+    // Send notification to vendor about order status change
+    const io = req.app.get('io');
+    const { sendOrderStatusUpdate } = require('../utils/socketNotifications');
+    
+    if (io && order.vendor) {
+      const vendorId = typeof order.vendor === 'object' ? order.vendor._id.toString() : order.vendor.toString();
+      const bundleName = order.dataBundle ? (typeof order.dataBundle === 'object' ? order.dataBundle.name : 'Data bundle') : 'Data bundle';
+      
+      sendOrderStatusUpdate(io, vendorId, {
+        orderId: order._id.toString(),
+        status: status,
+        previousStatus: previousStatus,
+        customerPhone: order.customerPhone,
+        amount: order.amountPaid,
+        message: `Order #${order._id.toString().slice(-6)} for ${bundleName} has been ${status}`,
+        updatedAt: new Date(),
+        updatedBy: 'admin'
+      });
+    }
 
     res.json({
       message: 'Order status updated successfully',
@@ -600,3 +777,45 @@ router.put('/vendors/:vendorId/approve', async (req, res, next) => {
 });
 
 module.exports = router;
+
+// Endpoint to manually verify Paystack transaction and complete order
+router.post('/verify-transaction', async (req, res, next) => {
+  const { transactionReference } = req.body;
+
+  try {
+    // Call Paystack API to verify transaction
+    const response = await axios.get(`https://api.paystack.co/transaction/verify/${transactionReference}`, {
+      headers: {
+        Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
+      }
+    });
+
+    const { status, data } = response;
+
+    if (status !== 200 || data.status !== 'success') {
+      throw new Error('Transaction verification failed');
+    }
+
+    const { amount, currency } = data.data;
+
+    // Find the order by transaction reference
+    const order = await Order.findOne({ transactionReference });
+
+    if (!order) {
+      throw new Error('Order not found');
+    }
+
+    // Check if the transaction amount matches the order amount
+    if (order.amount !== amount || order.currency !== currency) {
+      throw new Error('Transaction amount does not match order amount');
+    }
+
+    // Update order status to completed
+    order.status = 'completed';
+    await order.save();
+
+    res.status(200).json({ message: 'Transaction verified and order completed' });
+  } catch (error) {
+    next(error);
+  }
+});

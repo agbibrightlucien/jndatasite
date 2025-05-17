@@ -62,8 +62,17 @@ export const AuthProvider = ({ children }) => {
         dataKeys: response.data ? Object.keys(response.data) : []
       });
       
-      // The backend returns the token in the response.data object
-      const token = response.data?.token;
+      // Extract token from the response structure
+      // The backend should return either { token } or { vendor, token }
+      let token = null;
+      
+      if (response.data?.token) {
+        // Token is directly in response.data.token
+        token = response.data.token;
+      } else if (response.data?.vendor?.token) {
+        // Token is nested inside vendor object
+        token = response.data.vendor.token;
+      }
       
       if (!token) {
         console.error('No token received from login');
@@ -77,13 +86,24 @@ export const AuthProvider = ({ children }) => {
       
       // Fetch user profile with the new token
       await fetchUserProfile();
-      return response.data;
+      
+      // Return the vendor data from the response
+      return response.data.vendor || response.data;
     } catch (error) {
       console.error('Login error:', error.response ? {
         status: error.response.status,
         statusText: error.response.statusText,
         data: error.response.data
       } : error.message);
+      
+      // Provide a more user-friendly error message
+      if (error.response) {
+        if (error.response.status === 401) {
+          throw new Error('Invalid email or password');
+        } else if (error.response.status === 500) {
+          throw new Error('Server error occurred during login. Please try again later.');
+        }
+      }
       throw error;
     }
   };
@@ -105,9 +125,6 @@ export const AuthProvider = ({ children }) => {
         }
       });
       
-      // Log the raw response for debugging
-      console.log('Raw registration response:', response);
-      
       console.log('Registration response received:', {
         status: response.status,
         statusText: response.statusText,
@@ -115,37 +132,23 @@ export const AuthProvider = ({ children }) => {
         dataKeys: response.data ? Object.keys(response.data) : []
       });
       
-      // Log the full response data for debugging (excluding sensitive info)
+      // Log the response data for debugging (excluding sensitive info)
       const safeResponseData = { ...response.data };
       if (safeResponseData.vendor && safeResponseData.vendor.password) {
         safeResponseData.vendor.password = '[REDACTED]';
       }
-      console.log('Full registration response data:', safeResponseData);
+      console.log('Registration response data:', safeResponseData);
       
-      // The backend returns { vendor: vendorData, token: jwtToken } in the response.data object
-      // Extract token from the response structure - handle both possible response formats
+      // Extract token from the response structure
+      // The backend should return either { token } or { vendor, token }
       let token = null;
       
-      // Add more detailed logging to diagnose token extraction issues
-      console.log('Registration response structure:', {
-        hasVendor: !!response.data?.vendor,
-        hasToken: !!response.data?.token,
-        responseKeys: Object.keys(response.data || {})
-      });
-      
-      // Try to extract token from different possible locations in the response
       if (response.data?.token) {
         // Token is directly in response.data.token
         token = response.data.token;
-        console.log('Found token at response.data.token');
-      } else if (response.data?.vendor && response.data?.token) {
-        // Token is alongside vendor object
-        token = response.data.token;
-        console.log('Found token alongside vendor object');
       } else if (response.data?.vendor?.token) {
         // Token is nested inside vendor object
         token = response.data.vendor.token;
-        console.log('Found token nested inside vendor object');
       }
       
       if (!token) {
@@ -161,7 +164,9 @@ export const AuthProvider = ({ children }) => {
       
       // Fetch user profile with the new token
       await fetchUserProfile();
-      return response.data;
+      
+      // Return the vendor data from the response
+      return response.data.vendor || response.data;
     } catch (error) {
       console.error('Registration error:', error.response ? {
         status: error.response.status,
@@ -173,6 +178,8 @@ export const AuthProvider = ({ children }) => {
       if (error.response) {
         if (error.response.status === 400) {
           throw new Error(error.response.data.error || 'Registration failed: Invalid information provided');
+        } else if (error.response.status === 409) {
+          throw new Error('Email or phone number already registered');
         } else if (error.response.status === 500) {
           throw new Error('Server error occurred during registration. Please try again later.');
         }

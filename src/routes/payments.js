@@ -84,6 +84,15 @@ router.post('/verify', verifyPaystackWebhook, async (req, res) => {
 
     // Get bundle and customer details from metadata
     const { bundleId, customerPhone, vendorId } = verifyData.metadata;
+    
+    // Validate Ghanaian phone number
+    const { isValidGhanaianPhone } = require('../utils/phoneValidation');
+    if (!isValidGhanaianPhone(customerPhone)) {
+      transaction.status = 'failed';
+      transaction.failureReason = 'Invalid phone number format';
+      await transaction.save();
+      return res.status(400).json({ error: 'Invalid Ghanaian phone number format' });
+    }
 
     // Get the data bundle to calculate profit
     const dataBundle = await DataBundle.findById(bundleId);
@@ -116,14 +125,38 @@ router.post('/verify', verifyPaystackWebhook, async (req, res) => {
       vendor: vendorId,
       dataBundle: bundleId,
       customerPhone,
-      amountPaid: verifyData.amount / 100,
+      amountPaid: parseFloat((verifyData.amount / 100).toFixed(2)),
       status: 'pending'
     });
 
     await order.save();
+    
+    // Send notifications about new order and payment
+    const io = req.app.get('io');
+    const { sendOrderStatusUpdate, sendPaymentNotification } = require('../utils/socketNotifications');
+    
+    if (io) {
+      // Send order status notification
+      sendOrderStatusUpdate(io, vendorId, {
+        orderId: order._id.toString(),
+        status: 'pending',
+        customerPhone,
+        amount: order.amountPaid
+      });
+      
+      // Also send payment notification
+      const vendor = await Vendor.findById(vendorId).select('name');
+      sendPaymentNotification(io, vendorId, {
+        orderId: order._id.toString(),
+        amount: order.amountPaid,
+        vendorName: vendor ? vendor.name : 'Unknown',
+        customerPhone,
+        transactionReference: reference
+      });
+    }
 
     // Calculate and update vendor's profit
-    const profit = verifyData.amount / 100 - dataBundle.basePrice;
+    const profit = parseFloat((verifyData.amount / 100 - dataBundle.basePrice).toFixed(2));
     await Vendor.findByIdAndUpdate(
       vendorId,
       { $inc: { profit: profit } }

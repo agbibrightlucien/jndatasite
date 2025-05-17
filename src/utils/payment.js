@@ -15,6 +15,19 @@ const paystackConfig = require('../config/paystack');
  */
 const initializeTransaction = async ({ email, amount, callbackUrl, metadata }) => {
   try {
+    // Validate and format Ghanaian phone number if present in metadata
+    if (metadata && metadata.customerPhone) {
+      const { isValidGhanaianPhone, formatGhanaianPhone } = require('./phoneValidation');
+      
+      // Validate the phone number
+      if (!isValidGhanaianPhone(metadata.customerPhone)) {
+        throw new Error('Invalid Ghanaian phone number format. Must be 10 digits.');
+      }
+      
+      // Format the phone number for consistency
+      metadata.customerPhone = metadata.customerPhone.replace(/\D/g, '');
+    }
+    
     const response = await axios.post(
       `${paystackConfig.baseUrl}${paystackConfig.initializeUrl}`,
       {

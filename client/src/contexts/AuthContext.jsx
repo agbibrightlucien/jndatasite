@@ -118,42 +118,56 @@ export const AuthProvider = ({ children }) => {
       delete axios.defaults.headers.common['Authorization'];
       
       // Make a direct axios call to the registration endpoint
-      // The server endpoint is at /api/vendors/register
-      const response = await axios.post('/api/vendors/register', userData, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      console.log('Sending registration request to /api/vendors/register');
+      let response;
       
-      console.log('Registration response received:', {
+      // Based on examining the server routes, we know the correct endpoint is /api/vendors/register
+      // The server expects a POST request with the vendor data and returns {vendor, token}
+      try {
+        response = await axios.post('/api/vendors/register', userData, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        });
+        console.log('Registration successful with /api/vendors/register endpoint');
+      } catch (registerError) {
+        console.error('Registration endpoint error:', registerError);
+        
+        // If we get a specific error message from the server, use it
+        if (registerError.response && registerError.response.data && registerError.response.data.error) {
+          throw new Error(registerError.response.data.error);
+        }
+        
+        // Otherwise, throw a generic error
+        throw new Error('Registration failed: ' + (registerError.message || 'Unable to connect to server'));
+      }
+      
+      // Log the response for debugging
+      console.log('Registration response:', {
         status: response.status,
         statusText: response.statusText,
         hasData: !!response.data,
         dataKeys: response.data ? Object.keys(response.data) : []
       });
       
-      // Log the response data for debugging (excluding sensitive info)
-      const safeResponseData = { ...response.data };
-      if (safeResponseData.vendor && safeResponseData.vendor.password) {
-        safeResponseData.vendor.password = '[REDACTED]';
-      }
-      console.log('Registration response data:', safeResponseData);
-      
       // Extract token from the response structure
-      // The backend should return either { token } or { vendor, token }
+      // The server returns { vendor, token } for registration as seen in the server code
       let token = null;
       
+      // Check for token in the response - directly from server implementation
       if (response.data?.token) {
-        // Token is directly in response.data.token
+        console.log('Found token in response.data.token');
         token = response.data.token;
-      } else if (response.data?.vendor?.token) {
-        // Token is nested inside vendor object
-        token = response.data.vendor.token;
+      } else {
+        // If token isn't in the expected location, log the response for debugging
+        console.error('Unexpected response structure. Token not found:', response.data);
+        throw new Error('Authentication failed: Token not found in server response');
       }
       
       if (!token) {
-        console.error('No token in response data:', response.data);
-        throw new Error('Authentication failed: No token received from server');
+        console.error('Empty token received from server');
+        throw new Error('Authentication failed: Empty token received from server');
       }
       
       console.log('Token received successfully, setting up authentication');
